@@ -36,7 +36,7 @@ Getting LinkedIn API credentials is a multi-step process that requires creating 
 1.  **Person ID:**
     After getting your access token, you can find your Person ID by making an API call to the `/me` endpoint.
     *   **API Endpoint:** `https://api.linkedin.com/v2/me`
-    *   The response will contain an `id` field (e.g., `uVzUQ8CUU9`). This is your Person ID.
+    *   The response will contain an `id` field (e.g., `uXxQ9COX0`). This is your Person ID.
     *   See the guide here: [**Retrieving Member Profiles**](https://learn.microsoft.com/en-us/linkedin/shared/integrations/people/profile-api?view=li-lms-2024-08).
 
 2.  **Organization ID:**
