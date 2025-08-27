@@ -1,7 +1,0 @@
-**How to Get Your Perplexity AI API Key**
-To use this script, you need an API key from Perplexity AI. This key authenticates your requests to their service.
-
-Create or Log In to Your Perplexity Account: If you don't already have one, sign up for a free account at perplexity.ai.
-Navigate to API Settings: Once logged in, go directly to your API Settings page: https://www.perplexity.ai/settings/api
-Generate Your API Key: On the API Settings page, you will see a section for managing your API keys. Click the button to generate a new key.
-Copy and Store Your Key: Copy the generated key immediately and save it somewhere secure. You will need to add this key to your .env file under the PERPLEXITY_API_KEY variable.
