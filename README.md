@@ -52,7 +52,7 @@ This Python script automates the process of generating and posting daily facts o
     - `LINKEDIN_PERSON_ID`: Your LinkedIn person URN (e.g., `abCDef123`).
     - `LINKEDIN_ORGANIZATION_ID`: The ID of the LinkedIn Company Page you want to post to (e.g., `12345678`). This is only required if you plan to post on behalf of an organization.
 
-**NOTE** - refer to the [[perplexity_api_guide.md]] and [[linkedin_api_guide.md]] files for more details on how to obtain the api keys.
+**NOTE** - refer to the perplexity_api_guide.md and linkedin_api_guide.md files for more details on how to obtain the api keys.
 
 ### 4. Customize Topics
 
