@@ -1,87 +1,109 @@
-# Daily Knowledge Bot for LinkedIn
+# Daily Knowledge Bot with AI Image Generation
 
-This Python script automates the process of generating and posting daily facts on rotating topics to a LinkedIn personal profile or a company page. It uses the Perplexity API to find and summarize a verifiable online article, ensuring every post is backed by a source.
+This script automates the process of generating and posting daily content to LinkedIn. It fetches an interesting fact on a rotating topic, generates a professional LinkedIn post, creates a relevant AI-generated image, and can post the content to a personal or company LinkedIn page.
 
 ## Features
 
-- **Automated Content Creation:** Fetches and summarizes a new article each day based on a list of topics.
-- **LinkedIn Integration:** Posts generated content directly to LinkedIn.
-- **Flexible Posting:** Supports posting to a personal profile or a LinkedIn Company Page.
-- **Interactive Review:** Displays the generated post for manual review and confirmation before publishing.
-- **Secure Configuration:** Keeps all API keys and sensitive information safe in a [.env](cci:7://file:///Users/ramkumar.devanathan/Downloads/api-cookbook-main/docs/examples/daily-knowledge-bot/.env:0:0-0:0) file.
-- **Robust & Reliable:** Uses a two-step process to first find a source URL and then summarize it, guaranteeing a sourced fact every time.
+- **Daily Topics**: Automatically cycles through a list of topics from `topics.txt`.
+- **Fact Generation**: Uses the Perplexity API to find a relevant article and summarize it into an interesting fact.
+- **LinkedIn Post Crafting**: Generates a professional, engaging LinkedIn post based on the fact.
+- **AI Image Generation**: Uses Google Cloud Vertex AI to create a unique, abstract image for each topic.
+- **Content Archiving**: Saves all generated facts, posts, and images into organized local directories (`facts/`, `linkedin_posts/`, `images/`).
+- **Interactive Posting**: Includes a manual confirmation step before publishing any content to LinkedIn.
+
+## Prerequisites
+
+1.  **Python 3.8+**
+2.  **Google Cloud SDK**: You must have the `gcloud` command-line tool installed and authenticated. You can install it from [here](https://cloud.google.com/sdk/docs/install).
 
 ## Setup Instructions
 
-### 1. Prerequisites
+### 1. Install Dependencies
 
-- Python 3.7+
-- A Perplexity AI API Key
-- A LinkedIn account with a registered application to get API credentials.
+Install the required Python packages using pip:
 
-### 2. Installation
+```bash
+pip install -r requirements.txt
+```
 
-1.  **Create a Project Directory:**
-    Create a folder for the project and navigate into it.
+### 2. Configure Environment Variables
 
-2.  **Set up a Virtual Environment (Recommended):**
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
-    *(On Windows, use `venv\Scripts\activate`)*
+Copy the example environment file `.env.example` to a new file named `.env`:
 
-3.  **Install Dependencies:**
-    Install the required Python packages using the provided `requirements.txt` file.
-    ```bash
-    pip install -r requirements.txt
-    ```
+```bash
+cp .env.example .env
+```
 
-### 3. Configuration
+Now, open the `.env` file and fill in your credentials. For detailed instructions on acquiring API keys and setting up each service, please refer to our setup guides:
 
-1.  **Create a `.env` file:**
-    This project uses a `.env` file to manage secret keys. Copy the example file to create your own configuration file:
-    ```bash
-    cp .env.example .env
-    ```
+- **[Google Cloud Setup Guide](./google_cloud_setup_guide.md)**
+- **[Perplexity API Setup Guide](./perplexity_api_guide.md)**
+- **[LinkedIn API Setup Guide](./linkedin_api_guide.md)**
 
-2.  **Edit the `.env` file:**
-    Open the `.env` file in a text editor and fill in your credentials.
-    - `PERPLEXITY_API_KEY`: Your API key from Perplexity AI.
-    - `LINKEDIN_ACCESS_TOKEN`: Your LinkedIn API access token.
-    - `LINKEDIN_PERSON_ID`: Your LinkedIn person URN (e.g., `abCDef123`).
-    - `LINKEDIN_ORGANIZATION_ID`: The ID of the LinkedIn Company Page you want to post to (e.g., `12345678`). This is only required if you plan to post on behalf of an organization.
+A summary of the required keys is provided below.
 
-**NOTE** - refer to the `perplexity_api_guide.md` and `linkedin_api_guide.md` files for more details on how to obtain the api keys.
+#### Perplexity API Key
 
-### 4. Customize Topics
+- Go to your [Perplexity AI API Settings](https://www.perplexity.ai/settings/api) to generate an API key.
+- Add it to your `.env` file:
+  ```
+  PERPLEXITY_API_KEY="YOUR_PERPLEXITY_API_KEY_HERE"
+  ```
 
-Open the `topics.txt` file and add or remove topics as you see fit. The script will cycle through these topics day by day.
+#### Google Cloud Credentials
+
+- **Project ID**: Create or select a project in the [Google Cloud Console](https://console.cloud.google.com/). Your Project ID is listed on the dashboard.
+- **Enable APIs**: In your Google Cloud project, you must enable the **Vertex AI API**. You can use [this link](https://console.developers.google.com/apis/api/aiplatform.googleapis.com/overview) to enable it for your selected project.
+- **Enable Billing**: The Vertex AI API requires a project linked to an active billing account. You can enable billing from your project's [Billing page](https://console.cloud.google.com/billing).
+- Add your Project ID to the `.env` file:
+  ```
+  GOOGLE_PROJECT_ID="YOUR_GOOGLE_PROJECT_ID_HERE"
+  ```
+
+#### LinkedIn API Credentials
+
+- You need a LinkedIn application with the `r_liteprofile`, `w_member_social`, and (for company pages) `w_organization_social` permissions.
+- **Access Token**: Generate an access token for your application with the required scopes.
+- **Person ID**: This is your unique LinkedIn user ID. You can find it by inspecting the API response after authenticating or from your profile URL.
+- **Organization ID**: If posting to a company page, this is the ID of your LinkedIn organization.
+- Add your LinkedIn credentials to the `.env` file.
+
+### 3. Authenticate with Google Cloud
+
+Before running the script for the first time, you must authenticate your local machine with Google Cloud. Run the following command in your terminal and follow the browser-based login process:
+
+```bash
+gcloud auth application-default login
+```
 
 ## Usage
 
-You can run the script from your terminal with different flags to control its behavior.
+### Generate Content without Posting
 
-### To Generate a Fact (without posting)
-
-This is useful for testing. It will create a fact file in the `facts/` directory.
+To run the script, fetch the daily content, and save all artifacts locally without posting to LinkedIn:
 
 ```bash
-python3 daily_knowledge_bot_final.py
+python daily_knowledge_bot.py
 ```
 
-### To Post to Your Personal LinkedIn Profile
+### Post to Your Personal LinkedIn Profile
 
-This will generate the content, show you a preview, and ask for confirmation before posting to your personal profile.
+To generate content and post it to the personal profile specified by `LINKEDIN_PERSON_ID`:
 
 ```bash
-python3 daily_knowledge_bot_final.py --post-to-linkedin
+python daily_knowledge_bot.py --post-to-linkedin
 ```
+The script will display the post and image and ask for your confirmation before publishing.
 
-### To Post to a LinkedIn Company Page
+### Post to a LinkedIn Company Page
 
-This will generate the content, show you a preview, and ask for confirmation before posting to the company page specified in your `.env` file.
+To generate content and post it to the company page specified by `LINKEDIN_ORGANIZATION_ID`:
 
 ```bash
-python3 daily_knowledge_bot_final.py --post-to-linkedin --company
+python daily_knowledge_bot.py --post-to-linkedin --company
 ```
+**Note**: This requires your LinkedIn application to have the `w_organization_social` permission scope, which requires approval from LinkedIn.
+
+## Customization
+
+You can customize the daily topics by editing the `topics.txt` file. Add one topic per line. The script will cycle through these topics day by day.
