@@ -131,8 +131,29 @@ class GoogleImageClient:
         self.model = ImageGenerationModel.from_pretrained("imagegeneration@006")
 
     def generate_image(self, topic: str, output_dir: Path) -> Optional[Path]:
-        """Generates an image based on a topic and saves it locally."""
-        prompt = f"A visually appealing, professional, and abstract image representing the concept of '{topic}'. The style should be neutral, suitable for a corporate social media post. Avoid text and human figures."
+        """
+        Generates an image based on a topic and saves it locally.
+        
+        The prompt is designed to create professional, topic-appropriate images with a modern,
+        corporate-friendly aesthetic that works well for LinkedIn posts.
+        """
+        # Base prompt that adapts to different topics
+        prompt = (
+            f"Create a vibrant and engaging abstract representation of {topic}. "
+            f"The image should visually convey the essence of {topic} through a modern, "
+            "corporate-friendly design. Use a color palette that's appropriate for the topic - "
+            "consider blues and greens for environmental topics, blues and purples for technology, "
+            "or warm tones for health and wellness. Accent with complementary colors for visual interest. "
+            "Incorporate abstract elements that suggest the theme - for technology this might include "
+            "circuit-like patterns or data streams; for nature, leaf or water-like forms; for business, "
+            "geometric shapes suggesting growth and connection. The composition should be dynamic, "
+            "with a sense of movement and flow to suggest progress and positive development. "
+            "Use soft gradients and subtle lighting to create depth and visual interest. "
+            "The style should be contemporary, professional, and suitable for a business audience. "
+            "The image should be visually striking at both large and small sizes, with a balanced "
+            "composition that works well as a social media post. The overall effect should be "
+            "sophisticated and clearly related to the topic while maintaining a clean, professional look."
+        )
         try:
             logger.info(f"Generating image for topic: {topic}...")
             response = self.model.generate_images(prompt=prompt, number_of_images=1)
@@ -265,34 +286,34 @@ class DailyKnowledgeService:
         day = datetime.now().day
         return self.topics[(day - 1) % len(self.topics)]
 
-    def get_and_save_daily_content(self) -> Dict[str, any]:
-        """Generates and saves the daily fact, post, and image."""
-        topic = self.get_daily_topic()
+    def get_and_save_daily_content(self, generate_image: bool = True) -> Dict[str, any]:
+        """Generates and saves the daily fact, post, and optionally an image.
         
-        # Step 1: Get sourced fact from Perplexity
+        Args:
+            generate_image: If True, generates an image for the topic.
+        """
+        # Step 1: Get a topic and find an article
+        topic = self.get_daily_topic()
         logger.info(f"Step 1: Finding an article about: {topic}")
         article_url = self.perplexity_client.get_article_url(topic)
         if not article_url:
-            logger.error(f"Could not find a suitable article for {topic}. Exiting.")
-            sys.exit(1)
-        
+            raise RuntimeError(f"Could not find a suitable article for topic: {topic}")
         logger.info(f"Found article: {article_url}")
+
+        # Step 2: Summarize the article into a fact
         logger.info("Step 2: Summarizing article...")
         fact_raw = self.perplexity_client.summarize_article(article_url)
-        
-        # Standardize citation to [1]
+        # Clean up the fact (remove multiple references)
         fact, _ = re.subn(r'\s*\[\d+\]', ' [1]', fact_raw)
         if not fact.endswith(' [1]'):
             fact += " [1]"
-        
         sources = [article_url]
+
+        # Save fact to file
         today = datetime.now().strftime("%Y-%m-%d")
-        
-        # Save fact file
         fact_filename = self.facts_dir / f"daily_fact_{today}.txt"
-        file_content = f"DAILY FACT - {today}\nTopic: {topic}\n\n{fact.strip()}\n\nSource:\n[1] {sources[0]}"
         with open(fact_filename, "w", encoding="utf-8") as f:
-            f.write(file_content)
+            f.write(f"{fact}\n\nSources:\n" + "\n".join(f"[1] {src}" for src in sources))
         logger.info(f"Fact saved to {fact_filename}")
 
         # Step 3: Generate LinkedIn post text
@@ -303,8 +324,13 @@ class DailyKnowledgeService:
             f.write(post_text)
         logger.info(f"LinkedIn post text saved to {post_filename}")
 
-        # Step 4: Generate image
-        image_path = self.image_client.generate_image(topic, self.images_dir)
+        # Step 4: Generate image if requested
+        image_path = None
+        if generate_image and hasattr(self, 'image_client'):
+            try:
+                image_path = self.image_client.generate_image(topic, self.images_dir)
+            except Exception as e:
+                logger.warning(f"Failed to generate image: {e}")
 
         return {
             "topic": topic, 
@@ -319,6 +345,7 @@ def main():
     parser = argparse.ArgumentParser(description="Daily Knowledge Bot for LinkedIn.")
     parser.add_argument("--post-to-linkedin", action="store_true", help="Post the generated content to LinkedIn.")
     parser.add_argument("--company", action="store_true", help="Post on behalf of a company (requires organization ID).")
+    parser.add_argument("--no-image", action="store_true", help="Skip generating an image for the post.")
     args = parser.parse_args()
 
     # Load configuration from .env file
@@ -345,10 +372,12 @@ def main():
         sys.exit(1)
 
     # Generate all content first
-    content = service.get_and_save_daily_content()
+    content = service.get_and_save_daily_content(generate_image=not args.no_image)
     logger.info(f"Today's {content['topic']} fact: {content['fact']}")
-    if content["image_path"]:
+    if content.get("image_path"):
         logger.info(f"Image saved to: {content['image_path']}")
+    else:
+        logger.info("Image generation was skipped (--no-image flag used or image generation failed)")
 
     # Post to LinkedIn if requested
     if args.post_to_linkedin:
@@ -360,7 +389,7 @@ def main():
         print("The following post will be published to LinkedIn:")
         print("="*50)
         print(content["post_text"])
-        if content["image_path"]:
+        if content.get("image_path"):
             print(f"\nImage to be uploaded: {content['image_path']}")
         print("="*50)
         
