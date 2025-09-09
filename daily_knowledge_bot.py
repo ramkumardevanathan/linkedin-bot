@@ -132,33 +132,74 @@ class GoogleImageClient:
 
     def generate_image(self, topic: str, output_dir: Path) -> Optional[Path]:
         """
-        Generates an image based on a topic and saves it locally.
-        
-        The prompt is designed to create professional, topic-appropriate images with a modern,
-        corporate-friendly aesthetic that works well for LinkedIn posts.
+        Generates an image based on a topic using a structured prompt for consistent, high-quality results.
+        Uses a template that varies by topic category to ensure diverse and relevant imagery.
         """
-        # Base prompt that adapts to different topics
+        # Define style parameters
+        styles = [
+            "minimalist flat design with clean lines and solid colors",
+            "isometric 3D illustration with geometric shapes",
+            "watercolor-style abstract with soft edges and blending",
+            "line art with negative space and simple shapes",
+            "gradient mesh with smooth color transitions"
+        ]
+        
+        # Define color palettes by topic category
+        color_palettes = {
+            'tech': ['#2B5B8C', '#4D8BC8', '#7FB2F0', '#B3D4FF', '#E6F0FF'],
+            'environment': ['#2E7D32', '#4CAF50', '#81C784', '#C8E6C9', '#E8F5E9'],
+            'business': ['#283593', '#5C6BC0', '#9FA8DA', '#C5CAE9', '#E8EAF6'],
+            'health': ['#C62828', '#EF5350', '#EF9A9A', '#FFCDD2', '#FFEBEE'],
+            'default': ['#37474F', '#546E7A', '#78909C', '#B0BEC5', '#CFD8DC']
+        }
+        
+        # Categorize topic to select appropriate colors
+        topic_lower = topic.lower()
+        if any(term in topic_lower for term in ['tech', 'digital', 'ai', 'software']):
+            palette = 'tech'
+        elif any(term in topic_lower for term in ['environment', 'sustain', 'green', 'eco']):
+            palette = 'tech'  # Using tech palette for environment for a modern look
+        else:
+            palette = 'default'
+            
+        # Select a random style for variety
+        selected_style = random.choice(styles)
+        
+        # Construct the prompt with specific constraints
         prompt = (
-            f"Create a vibrant and engaging abstract representation of {topic}. "
-            f"The image should visually convey the essence of {topic} through a modern, "
-            "corporate-friendly design. Use a color palette that's appropriate for the topic - "
-            "consider blues and greens for environmental topics, blues and purples for technology, "
-            "or warm tones for health and wellness. Accent with complementary colors for visual interest. "
-            "Incorporate abstract elements that suggest the theme - for technology this might include "
-            "circuit-like patterns or data streams; for nature, leaf or water-like forms; for business, "
-            "geometric shapes suggesting growth and connection. The composition should be dynamic, "
-            "with a sense of movement and flow to suggest progress and positive development. "
-            "Use soft gradients and subtle lighting to create depth and visual interest. "
-            "The style should be contemporary, professional, and suitable for a business audience. "
-            "The image should be visually striking at both large and small sizes, with a balanced "
-            "composition that works well as a social media post. The overall effect should be "
-            "sophisticated and clearly related to the topic while maintaining a clean, professional look."
+            f"Create a professional, abstract illustration representing '{topic}'. "
+            f"Style: {selected_style}. "
+            f"Color palette: {', '.join(color_palettes[palette][:3])} with white space. "
+            "Use clean, modern design elements. No photorealistic elements, faces, or text. "
+            "Focus on abstract shapes, patterns, and compositions that symbolically represent the topic. "
+            "The image should be visually balanced with good use of negative space. "
+            "Suitable for a professional LinkedIn post header image."
+        )
+        
+        # Add negative prompts to avoid common issues
+        negative_prompt = (
+            "blurry, low quality, low resolution, distorted, deformed, disfigured, extra limbs, "
+            "text, words, letters, signatures, watermarks, people, faces, hands, fingers, "
+            "photorealistic, photograph, 3D render, hyperrealistic, realistic"
         )
         try:
             logger.info(f"Generating image for topic: {topic}...")
-            response = self.model.generate_images(prompt=prompt, number_of_images=1)
+            logger.debug(f"Using prompt: {prompt}")
+            logger.debug(f"Negative prompt: {negative_prompt}")
+            
+            # Generate image with both prompt and negative prompt
+            # Note: seed parameter is removed as it's not supported with watermarks
+            response = self.model.generate_images(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                number_of_images=1,
+                guidance_scale=7.5  # Controls how closely the model follows the prompt
+            )
+            
             image = response[0]
-            image_path = output_dir / f"{topic.replace(' ', '_').lower()}_{datetime.now().strftime('%Y%m%d')}.png"
+            # Create output directory if it doesn't exist
+            output_dir.mkdir(parents=True, exist_ok=True)
+            image_path = output_dir / f"{topic.replace(' ', '_').lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             image.save(location=str(image_path), include_generation_parameters=False)
             logger.info(f"Image saved to {image_path}")
             return image_path
