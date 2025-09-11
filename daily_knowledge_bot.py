@@ -243,14 +243,27 @@ class LinkedInClient:
             "Authorization": f"Bearer {self.access_token}",
         }
 
-    def upload_image(self, image_path: Path) -> str:
-        """Uploads an image to LinkedIn and returns the asset URN."""
+    def upload_image(self, image_path: Path, is_company: bool = False) -> str:
+        """
+        Uploads an image to LinkedIn and returns the asset URN.
+        
+        Args:
+            image_path: Path to the image file to upload
+            is_company: Whether the upload is for a company post
+            
+        Returns:
+            str: The asset URN for the uploaded image
+        """
         # Step 1: Register the upload
         register_upload_url = f"{self.API_URL}/assets?action=registerUpload"
+        
+        # Set the owner based on whether this is a company post or not
+        owner = f"urn:li:organization:{self.organization_id}" if is_company else f"urn:li:person:{self.person_id}"
+        
         register_body = {
             "registerUploadRequest": {
                 "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-                "owner": f"urn:li:person:{self.person_id}",
+                "owner": owner,
                 "serviceRelationships": [
                     {
                         "relationshipType": "OWNER",
@@ -277,7 +290,7 @@ class LinkedInClient:
         logger.info(f"Image uploaded successfully. Asset URN: {asset_urn}")
         return asset_urn
 
-    def post_as_person(self, text: str, image_urn: Optional[str] = None):
+    def post_as_person(self, text: str, image_path: Optional[Path] = None):
         """Posts an update to a personal LinkedIn profile."""
         post_url = f"{self.API_URL}/ugcPosts"
         post_body = {
@@ -291,18 +304,39 @@ class LinkedInClient:
             },
             "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"}
         }
-        if image_urn:
-            post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["shareMediaCategory"] = "IMAGE"
-            post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [
-                {"status": "READY", "media": image_urn}
-            ]
         
+        # Handle image upload if provided
+        if image_path:
+            try:
+                # Upload image with person as owner
+                image_urn = self.upload_image(image_path, is_company=False)
+                
+                # Update post body with image
+                post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["shareMediaCategory"] = "IMAGE"
+                post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [
+                    {
+                        "status": "READY",
+                        "description": {
+                            "text": "Daily knowledge share image"
+                        },
+                        "media": image_urn,
+                        "title": {
+                            "text": "Daily Knowledge Share"
+                        }
+                    }
+                ]
+                
+            except Exception as e:
+                logger.error(f"Error uploading image: {e}")
+                # Continue without image if upload fails
+        
+        # Make the post
         response = requests.post(post_url, headers=self.headers, json=post_body, timeout=30)
         if response.status_code != 201:
             raise LinkedInError(f"Failed to post to LinkedIn as person: {response.text}")
         logger.info("Successfully posted to LinkedIn personal profile.")
 
-    def post_as_company(self, text: str, image_urn: Optional[str] = None):
+    def post_as_company(self, text: str, image_path: Optional[Path] = None):
         """Posts an update to a LinkedIn company page."""
         post_url = f"{self.API_URL}/ugcPosts"
         post_body = {
@@ -316,12 +350,33 @@ class LinkedInClient:
             },
             "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"}
         }
-        if image_urn:
-            post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["shareMediaCategory"] = "IMAGE"
-            post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [
-                {"status": "READY", "media": image_urn}
-            ]
         
+        # Handle image upload if provided
+        if image_path:
+            try:
+                # Upload image with organization as owner
+                image_urn = self.upload_image(image_path, is_company=True)
+                
+                # Update post body with image
+                post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["shareMediaCategory"] = "IMAGE"
+                post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [
+                    {
+                        "status": "READY",
+                        "description": {
+                            "text": "Daily knowledge share image"
+                        },
+                        "media": image_urn,
+                        "title": {
+                            "text": "Daily Knowledge Share"
+                        }
+                    }
+                ]
+                
+            except Exception as e:
+                logger.error(f"Error uploading image: {e}")
+                # Continue without image if upload fails
+        
+        # Make the post
         response = requests.post(post_url, headers=self.headers, json=post_body, timeout=30)
         if response.status_code != 201:
             raise LinkedInError(f"Failed to post to LinkedIn as company: {response.text}")
@@ -499,16 +554,23 @@ def main():
             logger.error("LinkedIn client not initialized. Cannot post.")
             sys.exit(1)
 
+        # Print preview
+        print("\n--- LinkedIn Post Preview ---\n")
+        print(content["post_text"])
+        if content.get("image_path"):
+            print(f"\n[Image will be attached: {content['image_path']}]")
+        print("\n" + "-" * 30 + "\n")
+
         # Confirm before posting
-        user_input = input("Do you want to post the generated content to LinkedIn? (y/n): ")
+        user_input = input("Do you want to post the above content to LinkedIn? (y/n): ")
         if user_input.lower() == 'y':
             try:
+                image_path = content.get("image_path") if not args.no_image else None
                 if args.company:
-                    image_urn = service.linkedin_client.upload_image(content["image_path"])
-                    service.linkedin_client.post_as_company(content["post_text"], image_urn)
+                    service.linkedin_client.post_as_company(content["post_text"], image_path)
                 else:
-                    image_urn = service.linkedin_client.upload_image(content["image_path"])
-                    service.linkedin_client.post_as_person(content["post_text"], image_urn)
+                    service.linkedin_client.post_as_person(content["post_text"], image_path)
+                logger.info("Successfully posted to LinkedIn!")
             except LinkedInError as e:
                 logger.error(f"Failed to post to LinkedIn: {e}")
         else:
