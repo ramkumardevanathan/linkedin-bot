@@ -1,5 +1,3 @@
-
-
 # Daily Knowledge Bot
 
 A Python application that delivers interesting facts about rotating topics using the Perplexity AI API. Perfect for daily learning, newsletter content, or personal education.
@@ -22,6 +20,42 @@ A Python application that delivers interesting facts about rotating topics using
   - `python-dotenv`
   - `google-cloud-aiplatform`
   - `Pillow`
+
+## 🔧 Usage
+
+### Basic Commands
+
+- **Generate content locally (saves to files but doesn't post):**
+  ```bash
+  python daily_knowledge_bot.py
+  ```
+
+- **Generate and post to your personal LinkedIn profile:**
+  ```bash
+  python daily_knowledge_bot.py --post-to-linkedin
+  ```
+
+- **Generate and post to a LinkedIn Company Page (requires permissions):**
+  ```bash
+  python daily_knowledge_bot.py --post-to-linkedin --company
+  ```
+
+### Advanced Options
+
+- **Skip image generation (faster execution):**
+  ```bash
+  python daily_knowledge_bot.py --no-image
+  ```
+
+- **Generate images without adding the logo:**
+  ```bash
+  python daily_knowledge_bot.py --no-logo
+  ```
+
+- **Combine options (example - post to company without logo):**
+  ```bash
+  python daily_knowledge_bot.py --post-to-linkedin --company --no-logo
+  ```
 
 ## 🚀 Installation
 
