@@ -7,31 +7,37 @@ Google Vertex AI API to generate a relevant image. It can post this content
 to a LinkedIn personal profile or company page.
 
 Usage:
-  python daily_knowledge_bot_final.py
-  python daily_knowledge_bot_final.py --post-to-linkedin
-  python daily_knowledge_bot_final.py --post-to-linkedin --company
+  python daily_knowledge_bot.py
+  python daily_knowledge_bot.py --post-to-linkedin
+  python daily_knowledge_bot.py --post-to-linkedin --company
+  python daily_knowledge_bot.py --no-image
+  python daily_knowledge_bot.py --no-logo
 
 Requirements:
   - requests
   - python-dotenv
   - google-cloud-aiplatform
+  - Pillow
 """
 
 import os
-import json
-import logging
 import sys
+import json
 import random
+import logging
 import argparse
 import re
-from datetime import datetime
+from abc import ABC, abstractmethod
+from datetime import datetime, date
+from PIL import Image
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 
 import requests
 from dotenv import load_dotenv
-from google.cloud import aiplatform
+from google.oauth2 import service_account
 from vertexai.preview.vision_models import ImageGenerationModel
+from google.cloud import aiplatform
 
 # --- Configure logging ---
 logging.basicConfig(
@@ -122,90 +128,100 @@ class PerplexityClient:
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
 
-class GoogleImageClient:
+class ImageGenerationClient(ABC):
+    """Abstract base class for image generation clients."""
+    
+    @abstractmethod
+    def generate_image(self, topic: str, output_dir: Path) -> Optional[Path]:
+        """Generate an image for the given topic and save it to the output directory."""
+        pass
+
+
+class GoogleImageClient(ImageGenerationClient):
     """Client for generating images using Google's Vertex AI."""
+
     def __init__(self, project_id: str, location: str):
         if not project_id or "YOUR_GOOGLE_PROJECT_ID" in project_id:
             raise ConfigurationError("Google Cloud project ID is not configured.")
-        aiplatform.init(project=project_id, location=location)
-        self.model = ImageGenerationModel.from_pretrained("imagegeneration@006")
+        try:
+            logger.info("Initializing Vertex AI for image generation...")
+            aiplatform.init(project=project_id, location=location)
+            # Use the latest stable image generation model available in Vertex
+            self.model = ImageGenerationModel.from_pretrained("imagegeneration@005")
+        except Exception as e:
+            raise ConfigurationError(f"Failed to initialize Vertex AI: {e}")
 
     def generate_image(self, topic: str, output_dir: Path) -> Optional[Path]:
         """
-        Generates an image based on a topic using a structured prompt for consistent, high-quality results.
-        Uses a template that varies by topic category to ensure diverse and relevant imagery.
+        Generates a high-quality, photorealistic image based on a topic.
         """
-        # Define style parameters
-        styles = [
-            "minimalist flat design with clean lines and solid colors",
-            "isometric 3D illustration with geometric shapes",
-            "watercolor-style abstract with soft edges and blending",
-            "line art with negative space and simple shapes",
-            "gradient mesh with smooth color transitions"
-        ]
-        
-        # Define color palettes by topic category
-        color_palettes = {
-            'tech': ['#2B5B8C', '#4D8BC8', '#7FB2F0', '#B3D4FF', '#E6F0FF'],
-            'environment': ['#2E7D32', '#4CAF50', '#81C784', '#C8E6C9', '#E8F5E9'],
-            'business': ['#283593', '#5C6BC0', '#9FA8DA', '#C5CAE9', '#E8EAF6'],
-            'health': ['#C62828', '#EF5350', '#EF9A9A', '#FFCDD2', '#FFEBEE'],
-            'default': ['#37474F', '#546E7A', '#78909C', '#B0BEC5', '#CFD8DC']
-        }
-        
-        # Categorize topic to select appropriate colors
-        topic_lower = topic.lower()
-        if any(term in topic_lower for term in ['tech', 'digital', 'ai', 'software']):
-            palette = 'tech'
-        elif any(term in topic_lower for term in ['environment', 'sustain', 'green', 'eco']):
-            palette = 'tech'  # Using tech palette for environment for a modern look
-        else:
-            palette = 'default'
-            
-        # Select a random style for variety
-        selected_style = random.choice(styles)
-        
-        # Construct the prompt with specific constraints
         prompt = (
-            f"Create a professional, abstract illustration representing '{topic}'. "
-            f"Style: {selected_style}. "
-            f"Color palette: {', '.join(color_palettes[palette][:3])} with white space. "
-            "Use clean, modern design elements. No photorealistic elements, faces, or text. "
-            "Focus on abstract shapes, patterns, and compositions that symbolically represent the topic. "
-            "The image should be visually balanced with good use of negative space. "
-            "Suitable for a professional LinkedIn post header image."
+            f"A professional, high-detail, photorealistic image representing '{topic}'. "
+            f"The style should be modern, clean, and visually striking, suitable for a LinkedIn post. "
+            f"Focus on a composition that is both artistic and clearly communicates the subject. "
+            f"Avoid text, watermarks, or distracting elements. The lighting should be bright and natural."
         )
         
-        # Add negative prompts to avoid common issues
-        negative_prompt = (
-            "blurry, low quality, low resolution, distorted, deformed, disfigured, extra limbs, "
-            "text, words, letters, signatures, watermarks, people, faces, hands, fingers, "
-            "photorealistic, photograph, 3D render, hyperrealistic, realistic"
-        )
+        negative_prompt = "blurry, low quality, cartoon, drawing, painting, text, watermark, signature, distorted, deformed"
+
         try:
             logger.info(f"Generating image for topic: {topic}...")
             logger.debug(f"Using prompt: {prompt}")
-            logger.debug(f"Negative prompt: {negative_prompt}")
-            
-            # Generate image with both prompt and negative prompt
-            # Note: seed parameter is removed as it's not supported with watermarks
+
+            # Generate the image
             response = self.model.generate_images(
                 prompt=prompt,
-                negative_prompt=negative_prompt,
                 number_of_images=1,
-                guidance_scale=7.5  # Controls how closely the model follows the prompt
+                negative_prompt=negative_prompt,
+                guidance_scale=7.5
             )
             
             image = response[0]
+            
             # Create output directory if it doesn't exist
             output_dir.mkdir(parents=True, exist_ok=True)
+            
             image_path = output_dir / f"{topic.replace(' ', '_').lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             image.save(location=str(image_path), include_generation_parameters=False)
+            
             logger.info(f"Image saved to {image_path}")
             return image_path
+            
         except Exception as e:
             logger.error(f"Failed to generate image: {e}")
             return None
+
+# --- Helper Functions ---
+def add_logo_to_image(base_image_path: Path, logo_path: Path, output_path: Path):
+    """Overlays a logo onto the bottom-right corner of a base image."""
+    try:
+        logger.info(f"Opening base image: {base_image_path}")
+        base_image = Image.open(base_image_path).convert("RGBA")
+        
+        logger.info(f"Opening logo image: {logo_path}")
+        logo = Image.open(logo_path).convert("RGBA")
+
+        base_width, base_height = base_image.size
+        logo_width = int(base_width * 0.20)
+        logo_ratio = logo_width / float(logo.size[0])
+        logo_height = int(float(logo.size[1]) * float(logo_ratio))
+        logo = logo.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
+
+        padding_x = int(base_width * 0.02)
+        padding_y = int(base_height * 0.02)
+        position = (base_width - logo_width - padding_x, base_height - logo_height - padding_y)
+
+        transparent_layer = Image.new("RGBA", base_image.size, (0, 0, 0, 0))
+        transparent_layer.paste(logo, position)
+
+        watermarked_image = Image.alpha_composite(base_image, transparent_layer)
+        watermarked_image.convert("RGB").save(output_path)
+        logger.info(f"Successfully added logo and saved to: {output_path}")
+
+    except FileNotFoundError:
+        logger.warning(f"Logo file not found at '{logo_path}'. Skipping logo addition.")
+    except Exception as e:
+        logger.error(f"Could not add logo to image: {e}")
 
 class LinkedInClient:
     """Client for posting updates to LinkedIn."""
@@ -219,27 +235,16 @@ class LinkedInClient:
         self.organization_id = organization_id
         self.headers = {
             "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-            "X-Restli-Protocol-Version": "2.0.0"
         }
 
-    def _get_author_urn(self, is_company: bool) -> str:
-        """Determines the author URN based on the company flag."""
-        if is_company:
-            if not self.organization_id:
-                raise ConfigurationError("LinkedIn Organization ID is required for company posts.")
-            return f"urn:li:organization:{self.organization_id}"
-        if not self.person_id:
-            raise ConfigurationError("LinkedIn Person ID is required for personal posts.")
-        return f"urn:li:person:{self.person_id}"
-
-    def _register_image_upload(self, author_urn: str) -> Dict[str, any]:
-        """Step 1: Register the image upload with LinkedIn to get an upload URL."""
-        register_url = f"{self.API_URL}/assets?action=registerUpload"
-        register_data = {
+    def upload_image(self, image_path: Path) -> str:
+        """Uploads an image to LinkedIn and returns the asset URN."""
+        # Step 1: Register the upload
+        register_upload_url = f"{self.API_URL}/assets?action=registerUpload"
+        register_body = {
             "registerUploadRequest": {
                 "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-                "owner": author_urn,
+                "owner": f"urn:li:person:{self.person_id}",
                 "serviceRelationships": [
                     {
                         "relationshipType": "OWNER",
@@ -248,56 +253,73 @@ class LinkedInClient:
                 ]
             }
         }
-        response = requests.post(register_url, headers=self.headers, json=register_data)
-        response.raise_for_status()
-        return response.json()
+        response = requests.post(register_upload_url, headers=self.headers, json=register_body, timeout=30)
+        if response.status_code != 200:
+            raise LinkedInError(f"Failed to register image upload: {response.text}")
+        upload_data = response.json()["value"]
+        asset_urn = upload_data["asset"]
+        upload_url = upload_data["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
 
-    def _upload_image(self, upload_url: str, image_path: Path):
-        """Step 2: Upload the image binary to the provided URL."""
-        with open(image_path, "rb") as f:
-            image_data = f.read()
-        upload_headers = {"Content-Type": "application/octet-stream"}
-        response = requests.put(upload_url, headers=upload_headers, data=image_data)
-        response.raise_for_status()
-        logger.info("Image binary successfully uploaded to LinkedIn.")
+        # Step 2: Upload the image file
+        image_headers = {'Authorization': f'Bearer {self.access_token}'}
+        with open(image_path, 'rb') as f:
+            upload_response = requests.put(upload_url, headers=image_headers, data=f, timeout=60)
+        
+        if upload_response.status_code not in [200, 201]:
+            raise LinkedInError(f"Failed to upload image: {upload_response.text}")
+        
+        logger.info(f"Image uploaded successfully. Asset URN: {asset_urn}")
+        return asset_urn
 
-    def post_update(self, content: str, is_company: bool, image_path: Optional[Path] = None):
-        """Posts an update to LinkedIn, with or without an image."""
-        author_urn = self._get_author_urn(is_company)
+    def post_as_person(self, text: str, image_urn: Optional[str] = None):
+        """Posts an update to a personal LinkedIn profile."""
         post_url = f"{self.API_URL}/ugcPosts"
-
-        specific_content = {
-            "com.linkedin.ugc.ShareContent": {
-                "shareCommentary": {"text": content},
-                "shareMediaCategory": "NONE"
-            }
-        }
-
-        if image_path:
-            logger.info("Registering and uploading image to LinkedIn...")
-            upload_info = self._register_image_upload(author_urn)
-            upload_url = upload_info["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
-            image_asset_urn = upload_info["value"]["asset"]
-            self._upload_image(upload_url, image_path)
-            
-            specific_content["com.linkedin.ugc.ShareContent"]["shareMediaCategory"] = "IMAGE"
-            specific_content["com.linkedin.ugc.ShareContent"]["media"] = [
-                {"status": "READY", "media": image_asset_urn}
-            ]
-
-        post_data = {
-            "author": author_urn,
+        post_body = {
+            "author": f"urn:li:person:{self.person_id}",
             "lifecycleState": "PUBLISHED",
-            "specificContent": specific_content,
+            "specificContent": {
+                "com.linkedin.ugc.ShareContent": {
+                    "shareCommentary": {"text": text},
+                    "shareMediaCategory": "NONE"
+                }
+            },
             "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"}
         }
+        if image_urn:
+            post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["shareMediaCategory"] = "IMAGE"
+            post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [
+                {"status": "READY", "media": image_urn}
+            ]
         
-        response = requests.post(post_url, headers=self.headers, json=post_data)
+        response = requests.post(post_url, headers=self.headers, json=post_body, timeout=30)
         if response.status_code != 201:
-            raise LinkedInError(f"Failed to post to LinkedIn: {response.status_code} {response.text}")
+            raise LinkedInError(f"Failed to post to LinkedIn as person: {response.text}")
+        logger.info("Successfully posted to LinkedIn personal profile.")
+
+    def post_as_company(self, text: str, image_urn: Optional[str] = None):
+        """Posts an update to a LinkedIn company page."""
+        post_url = f"{self.API_URL}/ugcPosts"
+        post_body = {
+            "author": f"urn:li:organization:{self.organization_id}",
+            "lifecycleState": "PUBLISHED",
+            "specificContent": {
+                "com.linkedin.ugc.ShareContent": {
+                    "shareCommentary": {"text": text},
+                    "shareMediaCategory": "NONE"
+                }
+            },
+            "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"}
+        }
+        if image_urn:
+            post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["shareMediaCategory"] = "IMAGE"
+            post_body["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [
+                {"status": "READY", "media": image_urn}
+            ]
         
-        media_type = "with image" if image_path else "(text-only)"
-        logger.info(f"Successfully posted update {media_type} to LinkedIn as {author_urn.split(':')[-1]}.")
+        response = requests.post(post_url, headers=self.headers, json=post_body, timeout=30)
+        if response.status_code != 201:
+            raise LinkedInError(f"Failed to post to LinkedIn as company: {response.text}")
+        logger.info("Successfully posted to LinkedIn company page.")
 
 # --- Main Service --- 
 class DailyKnowledgeService:
@@ -315,71 +337,108 @@ class DailyKnowledgeService:
         self.topics = []
 
     def load_topics_from_file(self, filepath: Path):
-        if filepath.exists():
-            with open(filepath, "r", encoding="utf-8") as f:
+        try:
+            with open(filepath, 'r') as f:
                 self.topics = [line.strip() for line in f if line.strip()]
             logger.info(f"Loaded {len(self.topics)} topics from {filepath}")
-        else:
-            logger.warning(f"Topics file not found at {filepath}. Using default topics.")
-            self.topics = ["Artificial Intelligence", "Climate Change", "Neuroscience"]
+        except FileNotFoundError:
+            logger.error(f"Topics file not found at {filepath}. Please create it.")
+            self.topics = ["Artificial Intelligence"] # Default topic
 
     def get_daily_topic(self) -> str:
-        day = datetime.now().day
-        return self.topics[(day - 1) % len(self.topics)]
+        """Selects a topic based on the day of the month."""
+        if not self.topics:
+            self.load_topics_from_file(Path("topics.txt"))
+        day_of_month = datetime.now().day
+        return self.topics[(day_of_month - 1) % len(self.topics)]
 
-    def get_and_save_daily_content(self, generate_image: bool = True) -> Dict[str, any]:
-        """Generates and saves the daily fact, post, and optionally an image.
+    def get_and_save_daily_content(self, generate_image: bool = True) -> Dict[str, Any]:
+        """
+        Generates and saves the daily fact, post, and optionally an image.
         
         Args:
             generate_image: If True, generates an image for the topic.
+        
+        Returns:
+            A dictionary containing the generated content.
         """
-        # Step 1: Get a topic and find an article
         topic = self.get_daily_topic()
         logger.info(f"Step 1: Finding an article about: {topic}")
         article_url = self.perplexity_client.get_article_url(topic)
         if not article_url:
-            raise RuntimeError(f"Could not find a suitable article for topic: {topic}")
+            logger.error("Could not find a valid article URL.")
+            return {}
         logger.info(f"Found article: {article_url}")
 
-        # Step 2: Summarize the article into a fact
         logger.info("Step 2: Summarizing article...")
-        fact_raw = self.perplexity_client.summarize_article(article_url)
-        # Clean up the fact (remove multiple references)
-        fact, _ = re.subn(r'\s*\[\d+\]', ' [1]', fact_raw)
-        if not fact.endswith(' [1]'):
-            fact += " [1]"
-        sources = [article_url]
+        fact = self.perplexity_client.summarize_article(article_url)
+        fact_file = self.facts_dir / f"daily_fact_{date.today().isoformat()}.txt"
+        fact_file.write_text(fact, encoding='utf-8')
+        logger.info(f"Fact saved to {fact_file}")
 
-        # Save fact to file
-        today = datetime.now().strftime("%Y-%m-%d")
-        fact_filename = self.facts_dir / f"daily_fact_{today}.txt"
-        with open(fact_filename, "w", encoding="utf-8") as f:
-            f.write(f"{fact}\n\nSources:\n" + "\n".join(f"[1] {src}" for src in sources))
-        logger.info(f"Fact saved to {fact_filename}")
-
-        # Step 3: Generate LinkedIn post text
         logger.info(f"Step 3: Generating LinkedIn post text for topic: {topic}")
-        post_text = self.perplexity_client.generate_linkedin_post_text(topic, fact, sources)
-        post_filename = self.linkedin_posts_dir / f"linkedin_post_{today}.md"
-        with open(post_filename, "w", encoding="utf-8") as f:
-            f.write(post_text)
-        logger.info(f"LinkedIn post text saved to {post_filename}")
+        post_text = self.perplexity_client.generate_linkedin_post_text(topic, fact, [article_url])
+        post_file = self.linkedin_posts_dir / f"linkedin_post_{date.today().isoformat()}.md"
+        post_file.write_text(post_text, encoding='utf-8')
+        logger.info(f"LinkedIn post text saved to {post_file}")
 
-        # Step 4: Generate image if requested
         image_path = None
-        if generate_image and hasattr(self, 'image_client'):
-            try:
-                image_path = self.image_client.generate_image(topic, self.images_dir)
-            except Exception as e:
-                logger.warning(f"Failed to generate image: {e}")
+        if generate_image:
+            image_path = self.image_client.generate_image(topic, self.images_dir)
 
         return {
-            "topic": topic, 
-            "fact": fact, 
-            "sources": sources, 
+            "topic": topic,
+            "fact": fact,
             "post_text": post_text,
             "image_path": image_path
         }
+
+# --- Helper Functions ---
+def add_logo_to_image(base_image_path: Path, logo_path: Path, output_path: Path):
+    """Overlays a logo onto the bottom-right corner of a base image."""
+    try:
+        logger.info(f"Opening base image: {base_image_path}")
+        base_image = Image.open(base_image_path).convert("RGBA")
+        
+        logger.info(f"Opening logo image: {logo_path}")
+        logo = Image.open(logo_path).convert("RGBA")
+
+        # Resize logo to be 20% of the base image's width
+        base_width, base_height = base_image.size
+        logo_width = int(base_width * 0.20)
+        logo_ratio = logo_width / float(logo.size[0])
+        logo_height = int(float(logo.size[1]) * float(logo_ratio))
+        logo = logo.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
+
+        # Position logo at the bottom-right with 2% padding
+        padding_x = int(base_width * 0.02)
+        padding_y = int(base_height * 0.02)
+        position = (base_width - logo_width - padding_x, base_height - logo_height - padding_y)
+
+        # Create a transparent layer to paste the logo on
+        transparent_layer = Image.new("RGBA", base_image.size, (0, 0, 0, 0))
+        transparent_layer.paste(logo, position)
+
+        # Composite the base image with the logo layer
+        watermarked_image = Image.alpha_composite(base_image, transparent_layer)
+
+        # Save the final image, replacing the original
+        watermarked_image.convert("RGB").save(output_path)
+        logger.info(f"Successfully added logo and saved to: {output_path}")
+
+    except FileNotFoundError:
+        logger.error(f"Error: Logo file not found at '{logo_path}'. Please ensure it exists.")
+    except Exception as e:
+        logger.error(f"Could not add logo to image: {e}")
+
+def print_summary(topic: str, fact: str, post_text: str, image_path: Optional[Path] = None):
+    """Prints a summary of the generated content to the console."""
+    logger.info("--- Daily Knowledge Bot Summary ---")
+    logger.info(f"Topic: {topic}")
+    logger.info(f"Fact: {fact}")
+    logger.info(f"LinkedIn Post:\n{post_text}")
+    if image_path:
+        logger.info(f"Image generated at: {image_path}")
 
 # --- Main Execution --- 
 def main():
@@ -387,66 +446,70 @@ def main():
     parser.add_argument("--post-to-linkedin", action="store_true", help="Post the generated content to LinkedIn.")
     parser.add_argument("--company", action="store_true", help="Post on behalf of a company (requires organization ID).")
     parser.add_argument("--no-image", action="store_true", help="Skip generating an image for the post.")
+    parser.add_argument("--no-logo", action="store_true", help="Skip adding the brand logo to the image.")
     args = parser.parse_args()
 
     # Load configuration from .env file
     load_dotenv()
-    linkedin_client = None
+
+    # Initialize clients
     try:
         perplexity_client = PerplexityClient(api_key=os.getenv("PERPLEXITY_API_KEY"))
+        
         image_client = GoogleImageClient(
             project_id=os.getenv("GOOGLE_PROJECT_ID"),
             location=os.getenv("GOOGLE_LOCATION", "us-central1")
         )
+        logger.info("Using Google Vertex AI for image generation")
+        
+        linkedin_client = None
         if args.post_to_linkedin:
             linkedin_client = LinkedInClient(
                 access_token=os.getenv("LINKEDIN_ACCESS_TOKEN"),
                 person_id=os.getenv("LINKEDIN_PERSON_ID"),
                 organization_id=os.getenv("LINKEDIN_ORGANIZATION_ID")
             )
-        
+
         service = DailyKnowledgeService(perplexity_client, image_client, linkedin_client)
-        service.load_topics_from_file(Path("topics.txt"))
 
     except ConfigurationError as e:
-        logger.error(f"Configuration Error: {e}")
+        logger.error(f"Configuration error: {e}")
         sys.exit(1)
 
-    # Generate all content first
+    # Generate content
     content = service.get_and_save_daily_content(generate_image=not args.no_image)
-    logger.info(f"Today's {content['topic']} fact: {content['fact']}")
-    if content.get("image_path"):
-        logger.info(f"Image saved to: {content['image_path']}")
-    else:
-        logger.info("Image generation was skipped (--no-image flag used or image generation failed)")
+    if not content:
+        logger.error("Failed to generate content. Exiting.")
+        sys.exit(1)
+
+    # Add logo to the image if it was generated and not disabled
+    if content.get("image_path") and not args.no_logo:
+        logo_path = Path("brand_logo.png")
+        add_logo_to_image(content["image_path"], logo_path, content["image_path"]) # Overwrite original
 
     # Post to LinkedIn if requested
     if args.post_to_linkedin:
         if not service.linkedin_client:
             logger.error("LinkedIn client not initialized. Cannot post.")
-            return
+            sys.exit(1)
 
-        print("="*50)
-        print("The following post will be published to LinkedIn:")
-        print("="*50)
-        print(content["post_text"])
-        if content.get("image_path"):
-            print(f"\nImage to be uploaded: {content['image_path']}")
-        print("="*50)
-        
-        # Manual confirmation step
-        proceed = input("Do you want to proceed with posting? (y/n): ")
-        if proceed.lower() == 'y':
+        # Confirm before posting
+        user_input = input("Do you want to post the generated content to LinkedIn? (y/n): ")
+        if user_input.lower() == 'y':
             try:
-                service.linkedin_client.post_update(
-                    content=content["post_text"], 
-                    is_company=args.company, 
-                    image_path=content.get("image_path")
-                )
+                if args.company:
+                    image_urn = service.linkedin_client.upload_image(content["image_path"])
+                    service.linkedin_client.post_as_company(content["post_text"], image_urn)
+                else:
+                    image_urn = service.linkedin_client.upload_image(content["image_path"])
+                    service.linkedin_client.post_as_person(content["post_text"], image_urn)
             except LinkedInError as e:
-                logger.error(f"LinkedIn Error: {e}")
+                logger.error(f"Failed to post to LinkedIn: {e}")
         else:
-            logger.info("Posting to LinkedIn aborted by user.")
+            logger.info("Posting to LinkedIn cancelled by user.")
+    else:
+        # Print summary if not posting
+        print_summary(content["topic"], content["fact"], content["post_text"], content.get("image_path"))
 
 if __name__ == "__main__":
     main()

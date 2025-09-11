@@ -1,109 +1,174 @@
-# Daily Knowledge Bot with AI Image Generation
+---
+title: Daily Knowledge Bot
+description: A Python application that delivers interesting facts about rotating topics using the Perplexity AI API
+sidebar_position: 2
+keywords: [automation, facts, learning, scheduling, education]
+---
 
-This script automates the process of generating and posting daily content to LinkedIn. It fetches an interesting fact on a rotating topic, generates a professional LinkedIn post, creates a relevant AI-generated image, and can post the content to a personal or company LinkedIn page.
+# Daily Knowledge Bot
 
-## Features
+A Python application that delivers interesting facts about rotating topics using the Perplexity AI API. Perfect for daily learning, newsletter content, or personal education.
 
-- **Daily Topics**: Automatically cycles through a list of topics from `topics.txt`.
-- **Fact Generation**: Uses the Perplexity API to find a relevant article and summarize it into an interesting fact.
-- **LinkedIn Post Crafting**: Generates a professional, engaging LinkedIn post based on the fact.
-- **AI Image Generation**: Uses Google Cloud Vertex AI to create a unique, abstract image for each topic.
-- **Content Archiving**: Saves all generated facts, posts, and images into organized local directories (`facts/`, `linkedin_posts/`, `images/`).
-- **Interactive Posting**: Includes a manual confirmation step before publishing any content to LinkedIn.
+## 🌟 Features
 
-## Prerequisites
+- **Daily Topic Rotation**: Automatically selects topics based on the day of the month.
+- **AI-Powered Content**: Uses the Perplexity API to find relevant articles and generate summaries.
+- **AI-Generated Images**: Uses Google Vertex AI to create high-quality, relevant images for each topic.
+- **LinkedIn Integration**: Can post the generated content directly to a personal or company LinkedIn page.
+- **Customizable Logo Watermarking**: Automatically adds your brand's logo to every generated image.
+- **Configurable & Extensible**: Easily customize topics, manage API keys, and add new functionality.
 
-1.  **Python 3.8+**
-2.  **Google Cloud SDK**: You must have the `gcloud` command-line tool installed and authenticated. You can install it from [here](https://cloud.google.com/sdk/docs/install).
+## 📋 Requirements
 
-## Setup Instructions
+- Python 3.7+
+- A Google Cloud project with the Vertex AI API enabled.
+- Required packages:
+  - `requests`
+  - `python-dotenv`
+  - `google-cloud-aiplatform`
+  - `Pillow`
 
-### 1. Install Dependencies
+## 🚀 Installation
 
-Install the required Python packages using pip:
+1. Clone this repository or download the script
+2. Install the required packages:
 
 ```bash
+# Install from requirements file (recommended)
 pip install -r requirements.txt
+
+# Or install manually
+pip install requests python-dotenv google-cloud-aiplatform Pillow
 ```
 
-### 2. Configure Environment Variables
+3. Create a `.env` file in the same directory as the script and add the following environment variables. See the `.env.example` file for a template.
 
-Copy the example environment file `.env.example` to a new file named `.env`:
+   ```
+   # Perplexity API Key
+   PERPLEXITY_API_KEY="YOUR_PERPLEXITY_API_KEY_HERE"
 
-```bash
-cp .env.example .env
-```
+   # Google Cloud Configuration
+   GOOGLE_PROJECT_ID="YOUR_GOOGLE_CLOUD_PROJECT_ID"
+   GOOGLE_LOCATION="us-central1" # Or your preferred region
 
-Now, open the `.env` file and fill in your credentials. For detailed instructions on acquiring API keys and setting up each service, please refer to our setup guides:
+   # LinkedIn API Credentials (required for posting)
+   LINKEDIN_ACCESS_TOKEN="YOUR_LINKEDIN_ACCESS_TOKEN_HERE"
+   LINKEDIN_PERSON_ID="YOUR_LINKEDIN_PERSON_ID_HERE"
+   LINKEDIN_ORGANIZATION_ID="YOUR_LINKEDIN_ORGANIZATION_ID_HERE" # Optional, for company pages
+   ```
 
-- **[Google Cloud Setup Guide](./google_cloud_setup_guide.md)**
-- **[Perplexity API Setup Guide](./perplexity_api_guide.md)**
-- **[LinkedIn API Setup Guide](./linkedin_api_guide.md)**
+4. **Add Your Brand Logo**:
+   - Place your company's logo in the same directory as the script.
+   - The logo file **must be named `brand_logo.png`**. A sample has been provided, but you should replace it with your own.
 
-A summary of the required keys is provided below.
+## 🔧 Usage
 
-#### Perplexity API Key
+### Running the Bot
 
-- Go to your [Perplexity AI API Settings](https://www.perplexity.ai/settings/api) to generate an API key.
-- Add it to your `.env` file:
+The script can be run with several command-line flags to control its behavior:
+
+- **Generate content locally (default behavior)**:
+  ```bash
+  python daily_knowledge_bot.py
   ```
-  PERPLEXITY_API_KEY="YOUR_PERPLEXITY_API_KEY_HERE"
+
+- **Generate content and post to LinkedIn**:
+  ```bash
+  python daily_knowledge_bot.py --post-to-linkedin
   ```
 
-#### Google Cloud Credentials
-
-- **Project ID**: Create or select a project in the [Google Cloud Console](https://console.cloud.google.com/). Your Project ID is listed on the dashboard.
-- **Enable APIs**: In your Google Cloud project, you must enable the **Vertex AI API**. You can use [this link](https://console.developers.google.com/apis/api/aiplatform.googleapis.com/overview) to enable it for your selected project.
-- **Enable Billing**: The Vertex AI API requires a project linked to an active billing account. You can enable billing from your project's [Billing page](https://console.cloud.google.com/billing).
-- Add your Project ID to the `.env` file:
-  ```
-  GOOGLE_PROJECT_ID="YOUR_GOOGLE_PROJECT_ID_HERE"
+- **Post to a LinkedIn Company Page**:
+  ```bash
+  python daily_knowledge_bot.py --post-to-linkedin --company
   ```
 
-#### LinkedIn API Credentials
+- **Generate content without adding the logo**:
+  ```bash
+  python daily_knowledge_bot.py --no-logo
+  ```
 
-- You need a LinkedIn application with the `r_liteprofile`, `w_member_social`, and (for company pages) `w_organization_social` permissions.
-- **Access Token**: Generate an access token for your application with the required scopes.
-- **Person ID**: This is your unique LinkedIn user ID. You can find it by inspecting the API response after authenticating or from your profile URL.
-- **Organization ID**: If posting to a company page, this is the ID of your LinkedIn organization.
-- Add your LinkedIn credentials to the `.env` file.
+This will:
+1. Select a topic based on the current day
+2. Fetch an interesting fact from Perplexity AI
+3. Save the fact to a dated text file in your current directory
+4. Display the fact in the console
 
-### 3. Authenticate with Google Cloud
+### Customizing Topics
 
-Before running the script for the first time, you must authenticate your local machine with Google Cloud. Run the following command in your terminal and follow the browser-based login process:
+Edit the `topics.txt` file (one topic per line) or modify the `topics` list directly in the script.
 
-```bash
-gcloud auth application-default login
+Example topics:
+```
+astronomy
+history
+biology
+technology
+psychology
+ocean life
+ancient civilizations
+quantum physics
+art history
+culinary science
 ```
 
-## Usage
+### Automated Scheduling
 
-### Generate Content without Posting
-
-To run the script, fetch the daily content, and save all artifacts locally without posting to LinkedIn:
+#### On Linux/macOS (using cron):
 
 ```bash
-python daily_knowledge_bot.py
+# Edit your crontab
+crontab -e
+
+# Add this line to run daily at 8:00 AM
+0 8 * * * /path/to/python3 /path/to/daily_knowledge_bot.py
 ```
 
-### Post to Your Personal LinkedIn Profile
+#### On Windows (using Task Scheduler):
 
-To generate content and post it to the personal profile specified by `LINKEDIN_PERSON_ID`:
+1. Open Task Scheduler
+2. Create a new Basic Task
+3. Set it to run daily
+4. Add the action: Start a program
+5. Program/script: `C:\path\to\python.exe`
+6. Arguments: `C:\path\to\daily_knowledge_bot.py`
 
-```bash
-python daily_knowledge_bot.py --post-to-linkedin
+## 🔍 Configuration Options
+
+The following environment variables can be set in your `.env` file:
+
+- `PERPLEXITY_API_KEY` (required): Your Perplexity API key
+- `OUTPUT_DIR` (optional): Directory to save fact files (default: current directory)
+- `TOPICS_FILE` (optional): Path to your custom topics file
+
+## 📄 Output Example
+
 ```
-The script will display the post and image and ask for your confirmation before publishing.
+DAILY FACT - 2025-04-02
+Topic: astronomy
 
-### Post to a LinkedIn Company Page
-
-To generate content and post it to the company page specified by `LINKEDIN_ORGANIZATION_ID`:
-
-```bash
-python daily_knowledge_bot.py --post-to-linkedin --company
+Saturn's iconic rings are relatively young, potentially forming only 100 million years ago. This means dinosaurs living on Earth likely never saw Saturn with its distinctive rings, as they may have formed long after the dinosaurs went extinct. The rings are made primarily of water ice particles ranging in size from tiny dust grains to boulder-sized chunks.
 ```
-**Note**: This requires your LinkedIn application to have the `w_organization_social` permission scope, which requires approval from LinkedIn.
 
-## Customization
+## 🛠️ Extending the Bot
 
-You can customize the daily topics by editing the `topics.txt` file. Add one topic per line. The script will cycle through these topics day by day.
+Some ways to extend this bot:
+- Add email or SMS delivery capabilities
+- Create a web interface to view fact history
+- Integrate with social media posting
+- Add multimedia content based on the facts
+- Implement advanced scheduling with specific topics on specific days
+
+## ⚠️ Limitations
+
+- API rate limits may apply based on your Perplexity account
+- Quality of facts depends on the AI model
+- The free version of the Sonar API has a token limit that may truncate longer responses
+
+## 📜 License
+
+[MIT License](https://github.com/ppl-ai/api-cookbook/blob/main/LICENSE)
+
+## 🙏 Acknowledgements
+
+- This project uses the Perplexity AI API (https://docs.perplexity.ai/)
+- Inspired by daily knowledge calendars and fact-of-the-day services
