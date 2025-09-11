@@ -1,9 +1,4 @@
----
-title: Daily Knowledge Bot
-description: A Python application that delivers interesting facts about rotating topics using the Perplexity AI API
-sidebar_position: 2
-keywords: [automation, facts, learning, scheduling, education]
----
+
 
 # Daily Knowledge Bot
 
