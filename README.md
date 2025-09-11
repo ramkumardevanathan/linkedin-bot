@@ -6,7 +6,7 @@ A Python application that delivers interesting facts about rotating topics using
 
 - **Daily Topic Rotation**: Automatically selects topics based on the day of the month.
 - **AI-Powered Content**: Uses the Perplexity API to find relevant articles and generate summaries.
-- **AI-Generated Images**: Uses Google Vertex AI to create high-quality, relevant images for each topic.
+- **AI-Generated Images**: Uses Google's Gemini API to create high-quality, relevant images for each topic.
 - **LinkedIn Integration**: Can post the generated content directly to a personal or company LinkedIn page.
 - **Customizable Logo Watermarking**: Automatically adds your brand's logo to every generated image.
 - **Configurable & Extensible**: Easily customize topics, manage API keys, and add new functionality.
@@ -14,11 +14,11 @@ A Python application that delivers interesting facts about rotating topics using
 ## 📋 Requirements
 
 - Python 3.7+
-- A Google Cloud project with the Vertex AI API enabled.
+- Google API key with access to Gemini API
 - Required packages:
   - `requests`
   - `python-dotenv`
-  - `google-cloud-aiplatform`
+  - `google-generativeai`
   - `Pillow`
 
 ## 🔧 Usage
@@ -67,7 +67,7 @@ A Python application that delivers interesting facts about rotating topics using
 pip install -r requirements.txt
 
 # Or install manually
-pip install requests python-dotenv google-cloud-aiplatform Pillow
+pip install requests python-dotenv google-generativeai Pillow
 ```
 
 3. Create a `.env` file in the same directory as the script and add the following environment variables. See the `.env.example` file for a template.
@@ -76,15 +76,21 @@ pip install requests python-dotenv google-cloud-aiplatform Pillow
    # Perplexity API Key
    PERPLEXITY_API_KEY="YOUR_PERPLEXITY_API_KEY_HERE"
 
-   # Google Cloud Configuration
-   GOOGLE_PROJECT_ID="YOUR_GOOGLE_CLOUD_PROJECT_ID"
-   GOOGLE_LOCATION="us-central1" # Or your preferred region
+   # Google Gemini API Configuration
+   GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY_HERE"
 
    # LinkedIn API Credentials (required for posting)
    LINKEDIN_ACCESS_TOKEN="YOUR_LINKEDIN_ACCESS_TOKEN_HERE"
    LINKEDIN_PERSON_ID="YOUR_LINKEDIN_PERSON_ID_HERE"
    LINKEDIN_ORGANIZATION_ID="YOUR_LINKEDIN_ORGANIZATION_ID_HERE" # Optional, for company pages
    ```
+
+4. **Get a Google API Key**:
+   - Go to [Google AI Studio](https://makersuite.google.com/)
+   - Sign in with your Google account
+   - Go to the API Keys section
+   - Create a new API key
+   - Copy the key and add it to your `.env` file as `GOOGLE_API_KEY`
 
 4. **Add Your Brand Logo**:
    - Place your company's logo in the same directory as the script.

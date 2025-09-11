@@ -31,6 +31,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, date
 from PIL import Image
 from pathlib import Path
+from io import BytesIO
 from typing import Dict, List, Optional, Union, Any
 
 import requests
@@ -38,6 +39,7 @@ from dotenv import load_dotenv
 from google.oauth2 import service_account
 from vertexai.preview.vision_models import ImageGenerationModel
 from google.cloud import aiplatform
+from google import genai
 
 # --- Configure logging ---
 logging.basicConfig(
@@ -137,55 +139,59 @@ class ImageGenerationClient(ABC):
         pass
 
 
-class GoogleImageClient(ImageGenerationClient):
-    """Client for generating images using Google's Vertex AI."""
+class GeminiImageClient(ImageGenerationClient):
+    """Client for generating images using Google's Gemini API."""
 
-    def __init__(self, project_id: str, location: str):
-        if not project_id or "YOUR_GOOGLE_PROJECT_ID" in project_id:
-            raise ConfigurationError("Google Cloud project ID is not configured.")
+    def __init__(self, api_key: str):
+        if not api_key or "YOUR_GOOGLE_API_KEY" in api_key:
+            raise ConfigurationError("Google API key is not configured.")
         try:
-            logger.info("Initializing Vertex AI for image generation...")
-            aiplatform.init(project=project_id, location=location)
-            # Use the latest stable image generation model available in Vertex
-            self.model = ImageGenerationModel.from_pretrained("imagegeneration@005")
+            logger.info("Initializing Gemini API for image generation...")
+            self.client = genai.Client(api_key=api_key)
         except Exception as e:
-            raise ConfigurationError(f"Failed to initialize Vertex AI: {e}")
+            raise ConfigurationError(f"Failed to initialize Gemini API: {e}")
 
     def generate_image(self, topic: str, output_dir: Path) -> Optional[Path]:
         """
-        Generates a high-quality, photorealistic image based on a topic.
+        Generates a high-quality image based on a topic using Gemini API.
         """
         prompt = (
-            f"A professional, high-detail, photorealistic image representing '{topic}'. "
+            f"Create a professional, high-detail image representing '{topic}'. "
             f"The style should be modern, clean, and visually striking, suitable for a LinkedIn post. "
             f"Focus on a composition that is both artistic and clearly communicates the subject. "
             f"Avoid text, watermarks, or distracting elements. The lighting should be bright and natural."
         )
-        
-        negative_prompt = "blurry, low quality, cartoon, drawing, painting, text, watermark, signature, distorted, deformed"
 
         try:
             logger.info(f"Generating image for topic: {topic}...")
             logger.debug(f"Using prompt: {prompt}")
 
             # Generate the image
-            response = self.model.generate_images(
-                prompt=prompt,
-                number_of_images=1,
-                negative_prompt=negative_prompt,
-                guidance_scale=7.5
+            response = self.client.models.generate_content(
+                model="gemini-2.5-flash-image-preview",
+                contents=[prompt],
             )
             
-            image = response[0]
+            # Process the response
+            for part in response.candidates[0].content.parts:
+                if part.inline_data is not None:
+                    # Create output directory if it doesn't exist
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Generate a filename with timestamp
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"{topic.replace(' ', '_').lower()}_{timestamp}.png"
+                    image_path = output_dir / filename
+                    
+                    # Save the image
+                    image = Image.open(BytesIO(part.inline_data.data))
+                    image.save(image_path)
+                    
+                    logger.info(f"Image saved to {image_path}")
+                    return image_path
             
-            # Create output directory if it doesn't exist
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            image_path = output_dir / f"{topic.replace(' ', '_').lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            image.save(location=str(image_path), include_generation_parameters=False)
-            
-            logger.info(f"Image saved to {image_path}")
-            return image_path
+            logger.warning("No image data found in the response")
+            return None
             
         except Exception as e:
             logger.error(f"Failed to generate image: {e}")
@@ -324,7 +330,7 @@ class LinkedInClient:
 # --- Main Service --- 
 class DailyKnowledgeService:
     """Service to manage the daily workflow."""
-    def __init__(self, perplexity_client: PerplexityClient, image_client: GoogleImageClient, linkedin_client: Optional[LinkedInClient]):
+    def __init__(self, perplexity_client: PerplexityClient, image_client: GeminiImageClient, linkedin_client: Optional[LinkedInClient]):
         self.perplexity_client = perplexity_client
         self.image_client = image_client
         self.linkedin_client = linkedin_client
@@ -456,11 +462,11 @@ def main():
     try:
         perplexity_client = PerplexityClient(api_key=os.getenv("PERPLEXITY_API_KEY"))
         
-        image_client = GoogleImageClient(
-            project_id=os.getenv("GOOGLE_PROJECT_ID"),
-            location=os.getenv("GOOGLE_LOCATION", "us-central1")
+        # Initialize Gemini image client
+        image_client = GeminiImageClient(
+            api_key=os.getenv("GOOGLE_API_KEY")
         )
-        logger.info("Using Google Vertex AI for image generation")
+        logger.info("Using Google Gemini for image generation")
         
         linkedin_client = None
         if args.post_to_linkedin:
