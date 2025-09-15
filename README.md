@@ -5,11 +5,12 @@ A Python application that delivers interesting facts about rotating topics using
 ## 🌟 Features
 
 - **Daily Topic Rotation**: Automatically selects topics based on the day of the month.
-- **AI-Powered Content**: Uses the Perplexity API to find relevant articles and generate summaries.
-- **AI-Generated Images**: Uses Google's Gemini API to create high-quality, relevant images for each topic.
-- **LinkedIn Integration**: Can post the generated content directly to a personal or company LinkedIn page.
-- **Customizable Logo Watermarking**: Automatically adds your brand's logo to every generated image.
-- **Configurable & Extensible**: Easily customize topics, manage API keys, and add new functionality.
+- **AI-Powered Content**: Uses the Perplexity API to find relevant articles and generate engaging LinkedIn posts.
+- **Optional AI-Generated Images**: Uses Google's Gemini API to create high-quality, relevant images (disabled by default).
+- **LinkedIn Integration**: Post directly to personal profiles or company pages.
+- **Professional Formatting**: Clean, mobile-friendly posts with emoji-based lists and proper hashtag placement.
+- **Customizable Logo Watermarking**: Option to add your brand's logo to generated images.
+- **Configurable & Extensible**: Customize topics, manage API keys, and extend functionality.
 
 ## 📋 Requirements
 
@@ -42,19 +43,24 @@ A Python application that delivers interesting facts about rotating topics using
 
 ### Advanced Options
 
-- **Skip image generation (faster execution):**
+- **Enable image generation (disabled by default):**
   ```bash
-  python daily_knowledge_bot.py --no-image
+  python daily_knowledge_bot.py --add-image
   ```
 
-- **Generate images without adding the logo:**
+- **Skip adding logo to images (only applicable with --add-image):**
   ```bash
-  python daily_knowledge_bot.py --no-logo
+  python daily_knowledge_bot.py --add-image --no-logo
   ```
 
-- **Combine options (example - post to company without logo):**
+- **Post to LinkedIn with an image:**
   ```bash
-  python daily_knowledge_bot.py --post-to-linkedin --company --no-logo
+  python daily_knowledge_bot.py --post-to-linkedin --add-image
+  ```
+
+- **Post to company page with a custom image (no logo):**
+  ```bash
+  python daily_knowledge_bot.py --post-to-linkedin --company --add-image --no-logo
   ```
 
 ## 🚀 Installation
@@ -169,11 +175,30 @@ crontab -e
 
 ## 🔍 Configuration Options
 
-The following environment variables can be set in your `.env` file:
+### Required Environment Variables (in `.env` file):
 
-- `PERPLEXITY_API_KEY` (required): Your Perplexity API key
-- `OUTPUT_DIR` (optional): Directory to save fact files (default: current directory)
-- `TOPICS_FILE` (optional): Path to your custom topics file
+- `PERPLEXITY_API_KEY`: Your Perplexity API key for content generation
+- `GOOGLE_API_KEY`: Required if using image generation (--add-image)
+- `LINKEDIN_ACCESS_TOKEN`: Required for LinkedIn posting
+- `LINKEDIN_PERSON_ID`: Your LinkedIn person ID (for personal posts)
+- `LINKEDIN_ORGANIZATION_ID`: Your company's LinkedIn ID (for company posts)
+
+### Optional Environment Variables:
+- `OUTPUT_DIR`: Directory to save generated content (default: current directory)
+- `TOPICS_FILE`: Path to custom topics file (default: topics.txt in script directory)
+
+## 🖼️ Image Generation
+
+By default, the bot runs without generating images. To include AI-generated images in your posts:
+
+1. Set up your `GOOGLE_API_KEY` in the `.env` file
+2. Add the `--add-image` flag when running the script
+3. Optionally, place a `brand_logo.png` in the script directory for watermarking
+
+Example with image generation:
+```bash
+python daily_knowledge_bot.py --post-to-linkedin --add-image
+```
 
 ## 📄 Output Example
 
