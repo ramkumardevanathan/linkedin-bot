@@ -75,20 +75,56 @@ class PerplexityClient:
             "Content-Type": "application/json"
         }
 
-    def get_article_url(self, topic: str) -> Optional[str]:
-        """Step 1: Find a single, relevant article URL for a given topic."""
-        data = {
-            "model": "sonar-pro",
-            "messages": [
-                {"role": "system", "content": "You are a search assistant. Your sole purpose is to find a single, highly relevant, and verifiable online article for the given topic. Respond with ONLY the URL and nothing else."},
-                {"role": "user", "content": f"Find one interesting article about {topic}."}
-            ],
-            "max_tokens": 150, "temperature": 0.2
-        }
-        response = requests.post(self.BASE_URL, headers=self.headers, json=data, timeout=30)
-        response.raise_for_status()
-        url = response.json()["choices"][0]["message"]["content"].strip()
-        return url if url.startswith("http") and " " not in url else None
+    def get_article_url(self, topic: str, used_urls: set) -> Optional[str]:
+        """
+        Find a single, relevant article URL for a given topic that hasn't been used before.
+        
+        Args:
+            topic: The topic to find an article about
+            used_urls: Set of already used article URLs to avoid
+            
+        Returns:
+            Optional[str]: A URL to a relevant article, or None if no suitable article is found
+        """
+        max_attempts = 3
+        attempts = 0
+        
+        while attempts < max_attempts:
+            data = {
+                "model": "sonar-pro",
+                "messages": [
+                    {
+                        "role": "system", 
+                        "content": "You are a search assistant. Your sole purpose is to find a single, "
+                                  "highly relevant, and verifiable online article for the given topic. "
+                                  f"The article must not be any of these: {', '.join(used_urls) if used_urls else 'none'}. "
+                                  "Respond with ONLY the URL and nothing else."
+                    },
+                    {"role": "user", "content": f"Find one interesting article about {topic}."}
+                ],
+                "max_tokens": 150, 
+                "temperature": 0.2
+            }
+            
+            try:
+                response = requests.post(self.BASE_URL, headers=self.headers, json=data, timeout=30)
+                response.raise_for_status()
+                url = response.json()["choices"][0]["message"]["content"].strip()
+                
+                # Verify the URL is valid and not already used
+                if (url.startswith("http") and 
+                    " " not in url and 
+                    url not in used_urls and 
+                    not any(domain in url for domain in ['wikipedia.org', 'youtube.com', 'youtu.be'])):
+                    return url
+                    
+            except Exception as e:
+                logger.warning(f"Error fetching article URL (attempt {attempts + 1}): {e}")
+            
+            attempts += 1
+            
+        logger.error(f"Failed to find a new article after {max_attempts} attempts")
+        return None
 
     def summarize_article(self, article_url: str) -> str:
         """Step 2: Summarize the content of a given article URL."""
@@ -105,30 +141,92 @@ class PerplexityClient:
         return response.json()["choices"][0]["message"]["content"].strip()
 
     def generate_linkedin_post_text(self, topic: str, fact: str, sources: List[str]) -> str:
-        """Generates the text content for a LinkedIn post."""
+        """
+        Generates a well-formatted LinkedIn post using Perplexity AI.
+        
+        Args:
+            topic: The main topic of the post
+            fact: The key information to include
+            sources: List of source URLs
+            
+        Returns:
+            Formatted LinkedIn post text
+        """
+        system_prompt = """
+        You are a LinkedIn content creator who crafts professional, engaging posts with emoji-based lists.
+        
+        FORMATTING INSTRUCTIONS:
+        - Write in a professional yet conversational tone
+        - Keep it under 200 words
+        - Use proper paragraph breaks (one blank line between paragraphs)
+        - For lists: Structure as a vertical list where each line starts with a relevant emoji
+        - Each list item should be on its own line, starting with an emoji and a space
+        - Do not include any markdown formatting (no **, ##, •, etc.)
+        - Use proper capitalization and punctuation
+        - Ensure the post is mobile-friendly
+        - End with a thought-provoking question or call-to-action
+        - Add 3-5 relevant hashtags on a single line at the very end, before the source
+        - Do not add emojis to hashtags
+        - Format hashtags like this: #RemoteWork #FutureOfWork #Productivity
+        - Add source attribution at the very end as: "Source: [URL]"
+        
+        LIST FORMAT EXAMPLE:
+        🚀 Remote work has increased by 159% since 2005
+        💡 74% of professionals believe remote work is the new normal
+        📊 Companies with remote workers report 25% lower turnover
+        
+        EMOJI GUIDELINES:
+        - Start each list item with a relevant emoji followed by a space
+        - Use professional emojis (e.g., 📈 for growth, 💡 for ideas, 🚀 for success)
+        - Choose emojis that match the content of each point
+        - Keep emoji usage consistent and professional
+        - Don't use the same emoji twice in a row
+        
+        CONTENT GUIDELINES:
+        - Start with an engaging hook (with an emoji at the end)
+        - Present key points clearly with supporting emojis
+        - Use simple, direct language
+        - Keep sentences and paragraphs short
+        - Make it valuable for the reader
+        - Include relevant statistics or data points when possible
+        """
+        
+        user_prompt = f"""
+        TOPIC: {topic}
+        
+        KEY INFORMATION TO INCLUDE:
+        {fact}
+        
+        SOURCE: {sources[0]}
+        
+        Please create a professional LinkedIn post following the formatting instructions above.
+        """
+        
         data = {
             "model": "sonar",
             "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a social media expert specializing in LinkedIn content. Your tone is professional, engaging, and insightful. "
-                        "Convert the user's fact into a compelling LinkedIn post under 150 words.\n\n"
-                        "**Formatting Rules:**\n"
-                        "- Use paragraphs for readability. Separate them with a blank line.\n"
-                        "- Start with a strong hook.\n"
-                        "- End with a thought-provoking question or statement.\n"
-                        "- Include 3-5 relevant hashtags.\n"
-                        "- At the very end, under a 'Source:' heading, list ONLY the single source URL provided. Do not add any new sources or citations."
-                    )
-                },
-                {"role": "user", "content": f"Topic: {topic}\nFact to summarize: {fact}\nSource to use: {sources[0]}"}
+                {"role": "system", "content": system_prompt.strip()},
+                {"role": "user", "content": user_prompt.strip()}
             ],
-            "max_tokens": 300, "temperature": 0.7
+            "max_tokens": 500,
+            "temperature": 0.7
         }
-        response = requests.post(self.BASE_URL, headers=self.headers, json=data, timeout=30)
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        
+        try:
+            response = requests.post(self.BASE_URL, headers=self.headers, json=data, timeout=30)
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+            
+            # Ensure the source is included
+            if not re.search(r'Source:\s*' + re.escape(sources[0]) + r'\s*$', content, re.IGNORECASE):
+                content = f"{content.rstrip()}\n\nSource: {sources[0]}"
+                
+            return content.strip()
+            
+        except Exception as e:
+            logger.error(f"Error generating LinkedIn post: {e}")
+            # Fallback to simple formatting if there's an error
+            return f"{topic.upper()}\n\n{fact}\n\nSource: {sources[0]}"
 
 class ImageGenerationClient(ABC):
     """Abstract base class for image generation clients."""
@@ -392,10 +490,38 @@ class DailyKnowledgeService:
         self.facts_dir = Path("facts")
         self.linkedin_posts_dir = Path("linkedin_posts")
         self.images_dir = Path("images")
+        self.used_articles_file = Path("used_articles.json")
         self.facts_dir.mkdir(exist_ok=True)
         self.linkedin_posts_dir.mkdir(exist_ok=True)
         self.images_dir.mkdir(exist_ok=True)
         self.topics = []
+        self.used_urls = self._load_used_articles()
+        
+    def _load_used_articles(self) -> set:
+        """Load the set of already used article URLs."""
+        if not self.used_articles_file.exists():
+            return set()
+        
+        try:
+            with open(self.used_articles_file, 'r') as f:
+                data = json.load(f)
+                return set(data.get('used_urls', []))
+        except Exception as e:
+            logger.warning(f"Failed to load used articles: {e}")
+            return set()
+            
+    def _save_used_article(self, url: str):
+        """Save a new article URL to the used articles file."""
+        self.used_urls.add(url)
+        data = {
+            'last_updated': datetime.now().isoformat(),
+            'used_urls': list(self.used_urls)
+        }
+        try:
+            with open(self.used_articles_file, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save used article: {e}")
 
     def load_topics_from_file(self, filepath: Path):
         try:
@@ -419,18 +545,23 @@ class DailyKnowledgeService:
         
         Args:
             generate_image: If True, generates an image for the topic.
-        
+            
         Returns:
-            A dictionary containing the generated content.
+            A dictionary containing the generated content and the article URL.
         """
         topic = self.get_daily_topic()
-        logger.info(f"Step 1: Finding an article about: {topic}")
-        article_url = self.perplexity_client.get_article_url(topic)
+        if not topic:
+            raise ValueError("No topic selected")
+        
+        logger.info(f"Selected topic: {topic}")
+        
+        # Get article URL that hasn't been used before
+        article_url = self.perplexity_client.get_article_url(topic, self.used_urls)
         if not article_url:
-            logger.error("Could not find a valid article URL.")
-            return {}
-        logger.info(f"Found article: {article_url}")
-
+            raise ValueError("Could not find a suitable article for the topic")
+        
+        logger.info(f"Step 1: Found article: {article_url}")
+        
         logger.info("Step 2: Summarizing article...")
         fact = self.perplexity_client.summarize_article(article_url)
         fact_file = self.facts_dir / f"daily_fact_{date.today().isoformat()}.txt"
@@ -451,10 +582,10 @@ class DailyKnowledgeService:
             "topic": topic,
             "fact": fact,
             "post_text": post_text,
-            "image_path": image_path
+            "image_path": image_path,
+            "article_url": article_url
         }
 
-# --- Helper Functions ---
 def add_logo_to_image(base_image_path: Path, logo_path: Path, output_path: Path):
     """Overlays a logo onto the bottom-right corner of a base image."""
     try:
@@ -501,12 +632,11 @@ def print_summary(topic: str, fact: str, post_text: str, image_path: Optional[Pa
     if image_path:
         logger.info(f"Image generated at: {image_path}")
 
-# --- Main Execution --- 
 def main():
     parser = argparse.ArgumentParser(description="Daily Knowledge Bot for LinkedIn.")
     parser.add_argument("--post-to-linkedin", action="store_true", help="Post the generated content to LinkedIn.")
     parser.add_argument("--company", action="store_true", help="Post on behalf of a company (requires organization ID).")
-    parser.add_argument("--no-image", action="store_true", help="Skip generating an image for the post.")
+    parser.add_argument("--add-image", action="store_true", help="Generate an image for the post (disabled by default).")
     parser.add_argument("--no-logo", action="store_true", help="Skip adding the brand logo to the image.")
     args = parser.parse_args()
 
@@ -538,7 +668,12 @@ def main():
         sys.exit(1)
 
     # Generate content
-    content = service.get_and_save_daily_content(generate_image=not args.no_image)
+    try:
+        content = service.get_and_save_daily_content(generate_image=args.add_image)
+    except Exception as e:
+        logger.error(f"Failed to generate content: {e}")
+        sys.exit(1)
+
     if not content:
         logger.error("Failed to generate content. Exiting.")
         sys.exit(1)
@@ -570,14 +705,20 @@ def main():
                     service.linkedin_client.post_as_company(content["post_text"], image_path)
                 else:
                     service.linkedin_client.post_as_person(content["post_text"], image_path)
-                logger.info("Successfully posted to LinkedIn!")
+                
+                # Only mark the article as used if the post was successful
+                service._save_used_article(content["article_url"])
+                logger.info("Successfully posted to LinkedIn and updated used articles list!")
             except LinkedInError as e:
                 logger.error(f"Failed to post to LinkedIn: {e}")
+                logger.info("Article was not marked as used and can be reposted.")
         else:
             logger.info("Posting to LinkedIn cancelled by user.")
     else:
         # Print summary if not posting
         print_summary(content["topic"], content["fact"], content["post_text"], content.get("image_path"))
+        logger.info("\nNote: The article was not marked as used since no post was made.")
+        logger.info(f"Article URL: {content['article_url']}")
 
 if __name__ == "__main__":
     main()
