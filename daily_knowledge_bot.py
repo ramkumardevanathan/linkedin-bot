@@ -450,7 +450,7 @@ class LinkedInClient:
         }
         
         # Handle image upload if provided
-        if image_path:
+        if image_path and image_path.exists():
             try:
                 # Upload image with organization as owner
                 image_urn = self.upload_image(image_path, is_company=True)
@@ -474,11 +474,38 @@ class LinkedInClient:
                 logger.error(f"Error uploading image: {e}")
                 # Continue without image if upload fails
         
-        # Make the post
-        response = requests.post(post_url, headers=self.headers, json=post_body, timeout=30)
-        if response.status_code != 201:
-            raise LinkedInError(f"Failed to post to LinkedIn as company: {response.text}")
-        logger.info("Successfully posted to LinkedIn company page.")
+        try:
+            # Make the post
+            response = requests.post(
+                post_url, 
+                headers={
+                    **self.headers,
+                    "X-Restli-Protocol-Version": "2.0.0"
+                },
+                json=post_body, 
+                timeout=30
+            )
+            
+            if response.status_code == 201:
+                logger.info("Successfully posted to LinkedIn company page.")
+                return True
+            else:
+                logger.error(f"Failed to post to LinkedIn as company. Status: {response.status_code}")
+                logger.error(f"Response: {response.text}")
+                
+                # Check for common permission issues
+                if response.status_code == 403:
+                    logger.error("\nThis is likely due to missing permissions. Please ensure that:")
+                    logger.error("1. Your LinkedIn app has the 'w_organization_social' permission")
+                    logger.error("2. Your access token has the correct scopes")
+                    logger.error("3. Your LinkedIn app is approved for the Marketing Developer Platform")
+                    logger.error("4. Your organization's admin has approved the app")
+                
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error making request to LinkedIn API: {str(e)}")
+            return False
 
 # --- Main Service --- 
 class DailyKnowledgeService:
@@ -700,7 +727,7 @@ def main():
         user_input = input("Do you want to post the above content to LinkedIn? (y/n): ")
         if user_input.lower() == 'y':
             try:
-                image_path = content.get("image_path") if not args.no_image else None
+                image_path = content.get("image_path") if args.add_image else None
                 if args.company:
                     service.linkedin_client.post_as_company(content["post_text"], image_path)
                 else:
