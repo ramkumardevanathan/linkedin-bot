@@ -140,9 +140,9 @@ class PerplexityClient:
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"].strip()
 
-    def generate_linkedin_post_text(self, topic: str, fact: str, sources: List[str]) -> str:
+    def generate_human_linkedin_post(self, topic: str, fact: str, sources: List[str]) -> str:
         """
-        Generates a well-formatted LinkedIn post using Perplexity AI.
+        Generates a more personal, human-like LinkedIn post using Perplexity AI.
         
         Args:
             topic: The main topic of the post
@@ -150,8 +150,92 @@ class PerplexityClient:
             sources: List of source URLs
             
         Returns:
+            Formatted LinkedIn post text with a personal touch
+        """
+        system_prompt = """You are a professional creating engaging LinkedIn posts. 
+Write in a natural, conversational tone as if sharing insights with colleagues.
+Be concise (under 150 words) and include 1-2 relevant hashtags.
+
+FORMATTING RULES:
+- Use double newlines between paragraphs
+- Keep paragraphs short (1-3 sentences)
+- No indentation or extra spaces at the start of lines
+- No markdown formatting
+- No bullet points or numbered lists
+- No reference-style citations like [X]
+- No square brackets with numbers [1], [2], etc.
+- Skip the "Source" line (we'll add it separately)"""
+        
+        user_prompt = f"""Create a LinkedIn post about: {topic}
+
+Key information to include:
+{fact}
+
+Guidelines:
+- Start with a personal observation or question
+- Share 1-2 key insights
+- Add a specific detail or statistic
+- End with an open-ended question
+- Include 2-3 relevant hashtags naturally
+- Write conversationally with varied sentence lengths
+- Keep it under 150 words
+- Use 1-2 emojis naturally
+- Follow the formatting rules exactly"""
+
+        data = {
+            "model": "sonar",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "max_tokens": 500,
+            "temperature": 0.7
+        }
+        
+        try:
+            response = requests.post(self.BASE_URL, headers=self.headers, json=data, timeout=30)
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+            
+            # Clean up any markdown or unwanted formatting
+            content = content.replace('•', '').replace('-', '').strip()
+            # Remove reference-style citations like [X] or [1], [2], etc.
+            content = re.sub(r'\s*\[\d+\]\s*', ' ', content)  # [1], [2], etc.
+            content = re.sub(r'\s*\[X\]\s*', ' ', content)    # [X]
+            content = re.sub(r'\s*\[\w+\]\s*', ' ', content)  # Any other single-letter references
+            
+            # Clean up multiple spaces and normalize newlines
+            content = ' '.join(content.split())  # Remove extra spaces
+            content = '\n\n'.join([p.strip() for p in content.split('\n') if p.strip()])
+            
+            # Ensure the source is included with proper spacing
+            source_line = f"\n\nSource: {sources[0]}"
+            if not re.search(r'Source:\s*' + re.escape(sources[0]) + r'\s*$', content, re.IGNORECASE):
+                content = f"{content.rstrip()}{source_line}"
+            
+            return content.strip()
+            
+        except Exception as e:
+            logger.error(f"Error generating human-like post: {e}")
+            # Fallback to simple formatting with proper line breaks
+            return f"{topic.upper()}\n\n{fact}\n\nSource: {sources[0]}"
+
+    def generate_linkedin_post_text(self, topic: str, fact: str, sources: List[str], human_like: bool = False) -> str:
+        """
+        Generates a well-formatted LinkedIn post using Perplexity AI.
+        
+        Args:
+            topic: The main topic of the post
+            fact: The key information to include
+            sources: List of source URLs
+            human_like: If True, generates a more personal, conversational post
+            
+        Returns:
             Formatted LinkedIn post text
         """
+        if human_like:
+            return self.generate_human_linkedin_post(topic, fact, sources)
+            
         system_prompt = """
         You are a LinkedIn content creator who crafts professional, engaging posts with emoji-based lists.
         
@@ -566,12 +650,13 @@ class DailyKnowledgeService:
         day_of_month = datetime.now().day
         return self.topics[(day_of_month - 1) % len(self.topics)]
 
-    def get_and_save_daily_content(self, generate_image: bool = True) -> Dict[str, Any]:
+    def get_and_save_daily_content(self, generate_image: bool = True, human_like: bool = False) -> Dict[str, Any]:
         """
         Generates and saves the daily fact, post, and optionally an image.
         
         Args:
             generate_image: If True, generates an image for the topic.
+            human_like: If True, generates a more personal, conversational post
             
         Returns:
             A dictionary containing the generated content and the article URL.
@@ -595,9 +680,14 @@ class DailyKnowledgeService:
         fact_file.write_text(fact, encoding='utf-8')
         logger.info(f"Fact saved to {fact_file}")
 
-        logger.info(f"Step 3: Generating LinkedIn post text for topic: {topic}")
-        post_text = self.perplexity_client.generate_linkedin_post_text(topic, fact, [article_url])
-        post_file = self.linkedin_posts_dir / f"linkedin_post_{date.today().isoformat()}.md"
+        logger.info(f"Step 3: Generating {'human-like ' if human_like else ''}LinkedIn post text for topic: {topic}")
+        post_text = self.perplexity_client.generate_linkedin_post_text(
+            topic, 
+            fact, 
+            [article_url],
+            human_like=human_like
+        )
+        post_file = self.linkedin_posts_dir / f"linkedin_post_{date.today().isoformat()}{'_human' if human_like else ''}.md"
         post_file.write_text(post_text, encoding='utf-8')
         logger.info(f"LinkedIn post text saved to {post_file}")
 
@@ -665,6 +755,7 @@ def main():
     parser.add_argument("--company", action="store_true", help="Post on behalf of a company (requires organization ID).")
     parser.add_argument("--add-image", action="store_true", help="Generate an image for the post (disabled by default).")
     parser.add_argument("--no-logo", action="store_true", help="Skip adding the brand logo to the image.")
+    parser.add_argument("--human", action="store_true", help="Generate a more personal, human-like post.")
     args = parser.parse_args()
 
     # Load configuration from .env file
@@ -696,7 +787,10 @@ def main():
 
     # Generate content
     try:
-        content = service.get_and_save_daily_content(generate_image=args.add_image)
+        content = service.get_and_save_daily_content(
+            generate_image=args.add_image,
+            human_like=args.human
+        )
     except Exception as e:
         logger.error(f"Failed to generate content: {e}")
         sys.exit(1)
