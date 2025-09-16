@@ -63,6 +63,16 @@ A Python application that delivers interesting facts about rotating topics using
   python daily_knowledge_bot.py --post-to-linkedin --company --add-image --no-logo
   ```
 
+- **Generate a more personal, human-like post (works with any other options):**
+  ```bash
+  python daily_knowledge_bot.py --human
+  ```
+  
+  Combine with other options:
+  ```bash
+  python daily_knowledge_bot.py --human --post-to-linkedin --add-image
+  ```
+
 ## 🚀 Installation
 
 1. Clone this repository or download the script
