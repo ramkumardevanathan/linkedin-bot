@@ -209,8 +209,8 @@ Guidelines:
             content = '\n\n'.join([p.strip() for p in content.split('\n') if p.strip()])
             
             # Ensure the source is included with proper spacing
-            source_line = f"\n\nSource: {sources[0]}"
-            if not re.search(r'Source:\s*' + re.escape(sources[0]) + r'\s*$', content, re.IGNORECASE):
+            source_line = f"\n\nSource article here - {sources[0]}"
+            if not re.search(r'Source article here -\s*' + re.escape(sources[0]) + r'\s*$', content, re.IGNORECASE):
                 content = f"{content.rstrip()}{source_line}"
             
             return content.strip()
@@ -218,7 +218,7 @@ Guidelines:
         except Exception as e:
             logger.error(f"Error generating human-like post: {e}")
             # Fallback to simple formatting with proper line breaks
-            return f"{topic.upper()}\n\n{fact}\n\nSource: {sources[0]}"
+            return f"{topic.upper()}\n\n{fact}\n\nSource article here - {sources[0]}"
 
     def generate_linkedin_post_text(self, topic: str, fact: str, sources: List[str], human_like: bool = False) -> str:
         """
@@ -252,7 +252,7 @@ Guidelines:
         - Add 3-5 relevant hashtags on a single line at the very end, before the source
         - Do not add emojis to hashtags
         - Format hashtags like this: #RemoteWork #FutureOfWork #Productivity
-        - Add source attribution at the very end as: "Source: [URL]"
+        - Add source attribution at the very end as: "Source article here - [URL]"
         
         LIST FORMAT EXAMPLE:
         🚀 Remote work has increased by 159% since 2005
@@ -302,15 +302,15 @@ Guidelines:
             content = response.json()["choices"][0]["message"]["content"]
             
             # Ensure the source is included
-            if not re.search(r'Source:\s*' + re.escape(sources[0]) + r'\s*$', content, re.IGNORECASE):
-                content = f"{content.rstrip()}\n\nSource: {sources[0]}"
+            if not re.search(r'Source article here -\s*' + re.escape(sources[0]) + r'\s*$', content, re.IGNORECASE):
+                content = f"{content.rstrip()}\n\n\nSource article here - {sources[0]}"
                 
             return content.strip()
             
         except Exception as e:
             logger.error(f"Error generating LinkedIn post: {e}")
             # Fallback to simple formatting if there's an error
-            return f"{topic.upper()}\n\n{fact}\n\nSource: {sources[0]}"
+            return f"{topic.upper()}\n\n{fact}\n\nSource article here - {sources[0]}"
 
 class ImageGenerationClient(ABC):
     """Abstract base class for image generation clients."""
