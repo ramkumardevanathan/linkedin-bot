@@ -650,13 +650,14 @@ class DailyKnowledgeService:
         day_of_month = datetime.now().day
         return self.topics[(day_of_month - 1) % len(self.topics)]
 
-    def get_and_save_daily_content(self, generate_image: bool = True, human_like: bool = False) -> Dict[str, Any]:
+    def get_and_save_daily_content(self, generate_image: bool = True, human_like: bool = False, plug: bool = False) -> Dict[str, Any]:
         """
         Generates and saves the daily fact, post, and optionally an image.
         
         Args:
             generate_image: If True, generates an image for the topic.
             human_like: If True, generates a more personal, conversational post
+            plug: If True, adds a promotional line about the LinkedIn bot
             
         Returns:
             A dictionary containing the generated content and the article URL.
@@ -687,6 +688,11 @@ class DailyKnowledgeService:
             [article_url],
             human_like=human_like
         )
+        
+        # Add promotional line if plug is enabled
+        if plug:
+            plug_line = "\n\n--\nPosted with Linkedin Bot https://linkedin-bot-automated-c-nkrtmnz.gamma.site/"
+            post_text += plug_line
         post_file = self.linkedin_posts_dir / f"linkedin_post_{date.today().isoformat()}{'_human' if human_like else ''}.md"
         post_file.write_text(post_text, encoding='utf-8')
         logger.info(f"LinkedIn post text saved to {post_file}")
@@ -756,6 +762,7 @@ def main():
     parser.add_argument("--add-image", action="store_true", help="Generate an image for the post (disabled by default).")
     parser.add_argument("--no-logo", action="store_true", help="Skip adding the brand logo to the image.")
     parser.add_argument("--human", action="store_true", help="Generate a more personal, human-like post.")
+    parser.add_argument("--plug", action="store_true", help="Add a promotional line about the LinkedIn bot.")
     args = parser.parse_args()
 
     # Load configuration from .env file
@@ -789,7 +796,8 @@ def main():
     try:
         content = service.get_and_save_daily_content(
             generate_image=args.add_image,
-            human_like=args.human
+            human_like=args.human,
+            plug=args.plug
         )
     except Exception as e:
         logger.error(f"Failed to generate content: {e}")

@@ -2,9 +2,6 @@
 
 A Python application that delivers interesting facts about rotating topics using the Perplexity AI API. Perfect for daily learning, newsletter content, or personal education.
 
-Check out the gamma site to know more about this tool
-[LinkedIn Bot](https://linkedin-bot-automated-c-nkrtmnz.gamma.site/)
-
 ## 🌟 Features
 
 - **Daily Topic Rotation**: Automatically selects topics based on the day of the month.
@@ -74,6 +71,16 @@ Check out the gamma site to know more about this tool
   Combine with other options:
   ```bash
   python daily_knowledge_bot.py --human --post-to-linkedin --add-image
+  ```
+
+- **Add a thank you note to the developers (works with any other options):**
+  ```bash
+  python daily_knowledge_bot.py --plug
+  ```
+  
+  Combine with other options:
+  ```bash
+  python daily_knowledge_bot.py --plug --post-to-linkedin --add-image
   ```
 
 ## 🚀 Installation
